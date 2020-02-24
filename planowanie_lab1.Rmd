@@ -1,0 +1,170 @@
+---
+title: "Laboratorium 1"
+author: "Alicja HoĹ‚owiecka"
+date: "24 lutego 2020"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, dev = 'cairo_pdf')
+```
+
+```{r}
+library(tidyverse)
+library(nycflights13)
+```
+
+```{r}
+head(flights)
+nrow(flights)
+str(flights)
+```
+
+Próba prosta, losowanie indywidualne, bez zwracania.
+
+```{r}
+set.seed(2020)
+id <- sample(nrow(flights), 300)
+proba <- flights[id, ]
+```
+
+Inna funkcja losująca (z `dplyr`) - wylosuje dokładnie to samo.
+
+```{r}
+set.seed(2020)
+loty <- sample_n(flights, size = 300)
+
+```
+
+
+## Zadanie
+
+Wyliczyć z `arr_delay` średnią, odchylenie, min, max, liczebność z podziałem na lotniska, z których odlatują samoloty.
+
+
+```{r}
+#ctrl+Shift+M pipe
+loty %>%
+  group_by(origin) %>% 
+  summarise(m = mean(arr_delay, na.rm = 1),
+            s = sd(arr_delay, na.rm = 1),
+            min = min(arr_delay, na.rm = 1),
+            max = max(arr_delay, na.rm = 1),
+            n = n()) %>% 
+  arrange(m) %>%  #malejąco byłoby -m lub desc(m)
+  mutate(se = s/sqrt(n))
+```
+
+
+```{r}
+flights %>%
+  group_by(origin) %>% 
+  summarise(m = mean(arr_delay, na.rm = 1),
+            s = sd(arr_delay, na.rm = 1),
+            min = min(arr_delay, na.rm = 1),
+            max = max(arr_delay, na.rm = 1),
+            n = n()) %>% 
+  arrange(m) %>%  
+  mutate(se = s/sqrt(n))
+```
+
+
+Błąd standardowy - ile  średnio się pomylisz przy liczeniu średniej.
+
+## Zadanie 2
+
+Z próby utworzyć nową zmienną `wylot12` czy wylot po 12 czy przed. W podziale na grupy, jaka jest proporcja wylotów po 12, przed 12.
+
+```{r}
+proba$wylot12 <- ifelse(proba$sched_dep_time>=1200, 1, 0)
+table(proba$origin, proba$wylot12)
+```
+
+```{r}
+loty %>% 
+  mutate(wylot12 = sched_dep_time > 1200) %>% 
+  group_by(origin) %>% 
+  summarise(suma = sum(wylot12, na.rm = 1),
+            n = n(),
+            prop = suma/n*100,
+            prop2 = mean(wylot12, na.rm = 1)*100)
+#w przypadku zmiennej logicznej - mean sumuje jedynki i dzieli przez liczebność całej grupy
+# różnica między prop a prop2 może wystąpić jeżeli są braki danych (bo n() liczy wszystkie wiersze, a mean() bez braków danych)
+```
+
+```{r}
+sum(is.na(loty$sched_dep_time))
+```
+
+```{r}
+loty$sched_dep_time %>% 
+  is.na() %>% 
+  sum(.) #kropka czyli to co u góry
+```
+
+
+Jak w każdej grupie wygląda histogram dla `dep_delay`
+
+```{r}
+loty %>% 
+  ggplot(aes(x = dep_delay, fill = origin ))+
+  geom_histogram() + 
+  facet_wrap(~origin, nrow = 3, scales = "free")
+```
+
+
+
+boxplot zmiennej `air_time` w próbie, podział na origin
+
+```{r}
+loty %>% 
+  ggplot(aes(x = origin, 
+             y = air_time, 
+             fill = origin))+
+  geom_boxplot()
+```
+
+Wykres zależności pozostawania samolotu w powietrzu od dystansu jaki pokonał (scatter)
+
+```{r}
+loty %>% 
+  ggplot(aes(x = distance, 
+             y = air_time,
+             color = origin))+
+  geom_point()+
+  facet_wrap(~origin)+
+  geom_smooth(method = lm, 
+              se = F)+
+  theme_minimal()+
+  labs(x = "odległość [mile]", 
+       y = "czas lotu [min]",
+       color = "lotnisko")
+```
+
+Z całej próby, stworzyć zmienną suma opóźnień przylotu i odlotu, podzielić ze względu na lotniska (origin), wyznaczyć 5 największych opóźnień w każdym lotnisku.
+
+```{r}
+loty %>% 
+  mutate(delay = dep_delay + arr_delay) %>%
+  group_by(origin) %>% 
+  arrange(-delay) %>% 
+  slice(., 1:5) %>% 
+  select(origin, delay)
+```
+
+Z którego lotniska średnie opóźnienia są najmniejsze.
+
+```{r}
+loty %>% 
+  mutate(delay = dep_delay + arr_delay) %>%
+  group_by(origin) %>% 
+  summarise(m = mean(delay, na.rm = 1)) %>% 
+  arrange(m) %>% 
+  slice(., 1)
+```
+
+
