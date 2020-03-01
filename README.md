@@ -1,0 +1,3 @@
+# planowanie
+
+planowanie eksperymentu - laboratoria
