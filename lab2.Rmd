@@ -1,0 +1,189 @@
+---
+title: "Laboratorium 2"
+author: "Alicja Hołowiecka"
+date: "9 marca 2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = F,
+                      warning = F)
+```
+
+
+```{r}
+library(tidyverse)
+library(nycflights13)
+data(flights)
+```
+
+```{r}
+set.seed(2020)
+loty <- sample_n(flights, 300)
+```
+
+```{r}
+ci <- function(x, alpha=0.05){
+  sr <- mean(x, na.rm =1)
+  n <- sum(!is.na(x))
+  s <- sd(x, na.rm = 1)
+  t <- qt(1-alpha/2, n-1)
+  lwr <- sr-t*s/sqrt(n)
+  upr <- sr+t*s/sqrt(n)
+  return(c(lwr, upr, sr))
+}
+```
+
+```{r}
+ci(loty$dep_delay)
+ci(loty$arr_delay)
+```
+
+```{r}
+t.test(loty$dep_delay)
+t.test(loty$dep_delay)$conf.int
+```
+
+```{r}
+mean(flights$dep_delay, na.rm = 1)
+```
+
+Średnia z próby 12.68, średnia z populacji 12.64
+
+Rozkład zmiennej dep_delay w próbie i populacji
+
+```{r}
+
+loty %>% 
+  ggplot(aes(x = dep_delay))+
+  geom_histogram()
+
+flights %>% 
+  ggplot(aes(x=dep_delay))+
+  geom_histogram()
+```
+
+Rozkłady są podobne w próbie i populacji.
+
+Widać silną asymetrię prawostronną.
+
+```{r}
+summary(loty$dep_delay)
+summary(flights$dep_delay)
+```
+
+Wylosować 1000 prób (jądro generatora 2020) ze zbioru flights, gdzie każda próba jest wielkości 30 elementów, a następie dla każdej z prób wyznaczyć przedział ufności dla średniej oraz średnią. Na koniec sprawdzić, ile przedziałów zawiera prawdziwą średnią populacyjną. Wszystko to dla zmiennej dep_delay.
+
+```{r}
+set.seed(2020)
+proby <- NULL
+for (i in 1:1000){
+  proby[[i]] <- sample_n(flights, 30)
+}
+```
+
+```{r}
+set.seed(2020)
+proby <- 1:1000 %>% 
+  map(~sample_n(flights, 30)) 
+```
+
+```{r}
+wyniki <- NULL
+for (i in 1:1000){
+  wyniki[[i]] <- ci(proby[[i]]$dep_delay)
+}
+```
+
+```{r}
+wyniki <- proby %>% 
+  map(~ci(.x$dep_delay))
+```
+
+```{r}
+m <- mean(flights$dep_delay, na.rm=1)
+ile <- 0
+for (i in 1:1000){
+ ile <- ile + (m > wyniki[[i]][1] & m< wyniki[[i]][2])
+  
+}
+ile
+```
+
+```{r}
+wyniki %>% 
+  map_dbl(~{
+    ifelse(between(m, .x[1], .x[2]), 1, 0)
+    
+  }) %>% 
+  sum()
+```
+
+W 870 z 1000 prób, średnia populacyjna mieści się w przedziale ufności (87%).
+
+Histogram średnich z 1000 próbek.
+
+```{r}
+library(ggpubr)
+wyniki %>% 
+  map_dbl(~.x[3]) %>% 
+  gghistogram(.)
+```
+
+
+Asymetria prawostronna. Nie jest to rozkład normalny.
+
+Pierwotna zmienna dep_delay miała bardzo dużą asymetrię prawostronną => asymetria przeniesie się na rozkład średnich, jeśli próby były niewielkie (u nas 30)
+
+Ta sama procedura dla próbek 300-elementowych.
+
+```{r}
+set.seed(2020)
+proby <- 1:1000 %>% 
+  map(~sample_n(flights, 300))
+```
+
+```{r}
+wyniki <- proby %>% 
+  map(~ci(.x$dep_delay))
+```
+
+```{r}
+wyniki %>% 
+  map_dbl(~{
+    ifelse(between(m, .x[1], .x[2]), 1, 0)
+  }) %>% 
+  sum()
+```
+
+93.6%
+
+```{r}
+library(mosaic)
+curve(dchisq(x, df = 3), to = 15)
+```
+
+```{r}
+plotDist(dist = "chisq", 
+         df = 3, 
+         type = "h", 
+         groups = x>10 )
+# type = "h" zapodaje wypełnienie
+# kind = "cdf" zapodaje dystrybuantę
+```
+
+Rozkład Chisq jest prawostronnie asymetryczny
+
+```{r}
+set.seed(2020)
+CIsim(n = 10,
+      samples = 100,
+      rdist = "rchisq",
+      args = list(df = 3),
+      estimand = 3)
+```
+
+Czerwonych jest 10 (90%) poziom ufności 95% nie jest zrealizowany
