@@ -1,0 +1,204 @@
+---
+title: "PE zadanie 1"
+author: "Alicja Hołowiecka"
+date: "26-03-2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = F,
+                      message = F)
+```
+
+## Zadanie 1
+
+Wczytaj bibliotekę `survey` (powinna być już zainstalowana), następnie komendą `data(api)` wywołaj listę zbiorów dotyczących szkół w Kaliforni. Będzie to kilka zbiorów, a Ciebie będą interesować głównie dwa: `apisrs` oraz `apipop`. Pierwszy jest próbką 200 elementową populacji `apipop`. Na podsatwie próby oszacuj metodą przedziałową nieznany parametr wartości oczekiwanej zmiennej `enroll` na poziomie ufności 0.99. Sprawdź, czy nieznany parametry (dla Ciebie znany, bo może być wyznaczony na podstawie populacji) należy do przedziału ufności. Narysuj wykres rozkładu zmiennej `enroll` w próbie oraz oceń podstawowe statystki opisowe.
+
+## Zadanie 2
+
+Z wczytanego wcześniej zbioru `apipop` wylosuj 100 próbek o liczebności 36 elementów każda. Następnie napisz funkcję, która będzie liczyła przedział ufności dla frakcji. Zastosuj tą funkcję do zmiennej `sch.wide` mówiącej o tym czy szkoła wypełniła założone przez państwo wymagania dotyczące rozwoju uczniów (kod "Yes"). Sprawdź ile spośród wyznaczonych w ten sposób przedziałów ufności zwierało prawdziwą proporcję szkół spełniających wymagania w populacji. Opisz obszernie wyniki.
+
+# Rozwiązanie
+
+## Zadanie 1
+
+Wczytanie danych:
+
+```{r}
+library(survey)
+data(api)
+head(apisrs) # próbka
+head(apipop) # populacja
+#help(api)
+```
+
+
+
+Minimalna liczebność próby:
+
+```{r}
+n_min <- 28 + 25* (e1071::skewness(apipop$enroll, na.rm = T))^2
+n_min
+```
+
+Minimalna liczebność próby wynosi 161. Nasza próba ma 200, więc spełnia ten warunek.
+
+
+
+```{r}
+N <- nrow(apipop)
+N
+```
+
+Liczebność całej populacji wynosi 6194.
+
+Wyznaczanie przedziału ufności:
+
+```{r}
+n <- nrow(apisrs) # 200
+alpha <- 0.01
+t <- qt(1-alpha/2, n-1)
+s <- sd(apisrs$enroll)
+m <- mean(apisrs$enroll)
+lower <- m-t*s/sqrt(n)
+upper <- m+t*s/sqrt(n)
+lower
+upper
+```
+
+Próba ma 200 elementów, nie jest więc mała, możemy korzystać zarówno z kwantyla rozkładu t-Studenta, jak i rozkładu normalnego. Skorzystaliśmy z rozkładu t-Studenta.
+
+Przedział ufności dla średniej na podstawie próby `apisrs`: (512.25; 656.97).
+
+Wyznaczanie przedziału ufności z uwzględnieniem poprawki na populację skończoną:
+
+```{r}
+lower1 <- m-t*sqrt(1-n/N)*s/sqrt(n)
+upper1 <- m+t*sqrt(1-n/N)*s/sqrt(n)
+lower1
+upper1
+```
+
+Przedział ufności dla średniej z uwzględnieniem poprawki na populację skończoną ma postać (513.43; 655.79). Różnica jest nieznaczna w stosunku do przedziału ufności wyznaczonego bez poprawki.
+
+
+
+
+Wartość oczekiwana z całej populacji:
+
+```{r}
+m_pop <- mean(apipop$enroll, na.rm = 1)
+m_pop
+```
+
+Średnia z całej populacji (czyli nasz "nieznany" parametr) wynosi 619.05, zatem mieści się w przedziale ufności wyznaczonym na podstawie próbki (zarówno z poprawką na populację skończoną, jak i bez niej).
+
+Histogram dla zmiennej `enroll` w próbie:
+
+```{r}
+library(tidyverse)
+apisrs %>% 
+  ggplot(aes(x = enroll))+
+  geom_histogram()
+```
+
+Z wykresu widać, że zmienna `enroll` jest prawostronnie asymetryczna.
+
+Podstawowe statystyki opisowe dla zmniennej `enroll` w próbie: liczebność, minimum, pierwszy kwartyl, średnia, mediana, trzeci kwartyl, maksimum, odchylenie standardowe.
+
+```{r}
+apisrs %>% 
+  summarise(n= n(),
+            min = min(enroll, na.rm = 1),
+            Q1 = quantile(enroll, 0.25),
+            mean = mean(enroll, na.rm = 1),
+            median = median(enroll, na.rm = 1),
+            Q3 = quantile(enroll, 0.75),
+            max = max(enroll, na.rm = 1),
+            sd = sd(enroll, na.rm = 1))
+```
+
+
+## Zadanie 2
+
+```{r}
+head(apipop$sch.wide)
+sum(is.na(apipop$sch.wide))
+```
+
+Zmienna `sch.wide` to zmienna o dwóch poziomach `Yes` i `No`. Nie występują w niej braki danych.
+
+Przekodujemy `Yes` i `No` w zmiennej `sch.wide` na 1 i 0.
+
+```{r}
+apipop$sch.wide <- as.numeric(apipop$sch.wide)-1
+```
+
+
+Losujemy 100 próbek o liczebności 36.
+
+```{r}
+set.seed(2020)
+proby <- 1:100 %>% 
+  map(~sample_n(apipop, 36))
+```
+
+Przedział ufności dla frakcji wyznaczamy ze wzoru:
+
+$$p \in (\frac{m}{n} - u_{1−α/2}\frac{\sqrt{\frac{m}{n}(1-\frac{m}{n})}}{\sqrt{n}}; 
+\frac{m}{n} + u_{1−α/2}\frac{\sqrt{\frac{m}{n}(1-\frac{m}{n})}}{\sqrt{n}})$$
+gdzie:
+
+n - liczba wszystkich przypadków
+
+m - liczba wyróżnionych przypadków
+
+u - kwantyl rozkładu normalnego
+
+Funkcja licząca przedział ufności dla frakcji wygląda następująco:
+
+```{r}
+ci_frakcja <- function(dane, alpha){
+  m <- sum(dane)
+  n <- length(dane)
+  u <- qnorm(1-alpha/2)
+  lower <- m/n-u*sqrt(m/n*(1-m/n))/sqrt(n)
+  upper <- m/n+u*sqrt(m/n*(1-m/n))/sqrt(n)
+  return(c(lower, upper))
+}
+```
+
+Funkcja ta zwraca wektor składający się z lewego i prawego końca przedziału ufności.
+
+Wyznaczanie przedziałów ufności dla wylosowanych wcześniej prób:
+
+```{r}
+przedzialy <- proby %>% 
+  map(~ci_frakcja(.x$sch.wide, 0.05))
+```
+
+
+Proporcja w całej populacji:
+
+```{r}
+prop <- mean(apipop$sch.wide)
+prop
+```
+
+Proporcja szkół, które spełniają wymagania (`sch.wide = Yes`) do wszystkich szkół wynosi 83%.
+
+Sprawdzimy, ile przedziałów ufności pokrywa ten szukany parametr:
+
+```{r}
+przedzialy %>% 
+  map_dbl(~{
+    ifelse(between(prop, .x[1], .x[2]), 1, 0)
+    
+  }) %>% 
+  sum()
+```
+
+Dla 91 ze 100 próbek, wyznaczony 95-procentowy przedział ufności pokrywa szukany parametr.

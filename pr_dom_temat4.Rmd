@@ -1,0 +1,170 @@
+---
+title: "Zadanie domowe PE"
+author: "Alicja Hołowiecka"
+date: "22 04 2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning =F)
+```
+
+## Polecenie
+
+Dla zbioru danych `apistrat` Zróbcie analizę średniej wyników testów w roku 2000 (api00) z uwzględnieniem faktu, że próba jest wylosowana warstwowo, gdzie warstwy stanowią typy szkoły (elementary, middle, high). Porównajcie wyniki ze średnią zmiennej api00 całej populacji (apipop) oraz ze średnią liczoną bez uwzględniania faktu, iż próba jest warstwowa (ale z tego samego zbioru czyli apistrat). Na koniec przeprowadźcie estymację ilorazową wykorzystując silny związek pomiędzy api00 a api99.
+Oceńcie obciążenie tych trzech estymatorów (zwyklej średniej, średniej z uwzględnieniem warstw i średniej ilorazowej) oraz ich błędy standardowe estymacji. 
+Związek pomiędzy api00 a api99 przedstawcie graficznie.
+
+
+## Wczytanie danych
+
+```{r}
+library(survey)
+library(tidyverse)
+data(api)
+head(apistrat)
+#help(apistrat)
+```
+
+
+
+## Podział na warstwy
+
+Warstwami są typy szkół (zmienna `stype`): E - Elementary, M - Middle, H - High School. Wagi znajdują się w zbiorze danych w zmiennej `pw`.
+
+
+
+```{r}
+dstrat <- svydesign(ids=~1, strata = ~stype, weights = ~pw, data = apistrat)
+summary(dstrat)
+```
+
+Mamy 100 szkół typu Elemetary i po 50 szkół Middle i High
+
+```{r}
+svytotal(~stype, dstrat)
+table(apipop$stype)
+```
+
+Szacujemy liczbę szkół danego typu w populacji. Szacunki zgadzają się z rzeczywistymi wynikami.
+
+## Średnia
+
+```{r}
+sr_warstwy <- svymean(~api00, dstrat)
+sr_warstwy
+```
+
+Średnia wynosi 662.29 a błąd 9.54.
+
+Porównamy ze średnią z całej populacji:
+
+```{r}
+sr_pop <- mean(apipop$api00)
+sr_pop
+```
+
+Średnia z całej populacji wynosi 664.71
+
+Średnia liczona z próby bez podziału na warstwy
+
+```{r}
+sr_bw <- mean(apistrat$api00)
+sr_bw
+```
+
+Porównanie uzyskanych estymatorów:
+
+```{r echo = F}
+srednie <- cbind(sr_warstwy[1],  sr_bw, sr_pop) %>% as.data.frame()
+colnames(srednie) <- c("średnia z próby z warstwami", 
+                       "średnia z próby bez warstw","średnia z populacji")
+```
+
+```{r echo = F}
+library(kableExtra)
+kable(srednie) %>% 
+kable_styling(full_width = T)
+```
+
+Widać, że estymator uzyskany z próby przy uwzględnieniu warstw jest dokładniejszy niż bez uwzględniania warstw.
+
+## Związek pomiędzy api99 a api00
+
+Na rysunku przedstawimy związek pomiędzy zmiennymi `api99` a `api00`.
+
+```{r}
+apistrat %>% 
+  ggplot(aes(x = api99, y = api00))+
+  geom_point()+
+  geom_smooth(method = lm, se = F)
+```
+
+Z rysunku wynika, że zależność pomiędzy `api99` a `api00` prawdopodobnie jest liniowa. 
+
+```{r}
+cor(apistrat$api99, apistrat$api00)
+```
+
+Korelacja wynosi 0.97, jest dodatnia i bardzo silna.
+
+## Estymacja ilorazowa
+
+Przeprowadzimy estymację ilorazową za pomocą zmniennej towarzyszącej `api99`.
+
+```{r}
+B <- svyratio(~api00, ~api99, design=dstrat)
+B
+x <- svymean(~api99, dstrat)
+sr_iloraz <- B$ratio*x[1]
+sr_iloraz
+blad_iloraz <- SE(B)*x[1]
+blad_iloraz
+```
+
+Jest to oszacowanie praktycznie takie jak wynik uzyskany z próby przy uwzględnieniu warstw, ale ma mniejszy błąd standardowy estymacji: wcześniej było to 9.54 a teraz 2.32.
+
+## Porównanie obciążenia estymatorów i błędów standardowych
+
+
+
+Dla średniej z uwzględnieniem warstw i średniej ilorazowej otrzymaliśmy błędy standardowe z funkcji obliczającej średnie. Potrzebujemy jeszcze błędu estymacji dla zwykłej średniej ($\frac{s}{\sqrt{n}}$)
+
+```{r}
+s <- sd(apistrat$api00)
+n <- nrow(apistrat)
+blad_bw <- s/sqrt(n)
+blad_bw
+```
+
+Obliczamy obciążenie estymatorów ($E(\hat{\theta})-\theta$)
+
+```{r}
+obc_warstwy <- sr_warstwy[1]-sr_pop
+obc_bw <- sr_bw-sr_pop
+obc_iloraz <- sr_iloraz-sr_pop
+```
+
+```{r echo = F}
+df <- data.frame(cbind( 
+      c(662.29, 652.82, 662.29),
+      c(9.54, 8.55, 2.32),
+      round(c(-2.43, -11.89, -2.43),2)),
+      row.names =c("Z uwzględnieniem warstw", 
+                   "Bez uwzględnienia warstw", 
+                   "Ilorazowa"))
+colnames(df) <- c("Średnia", "Błąd standardowy", "Obciążenie")
+```
+
+```{r echo =F}
+kable(df) %>% 
+  kable_styling(full_width = T)
+```
+
+Najmniejszy błąd standardowy estymacji jest w przypadku średniej ilorazowej, a największy w przypadku średniej liczonej z uwzględnieniem warstw.
+
+Najbardziej obciążony jest estymator średniej na podstawie próby bez uwzględnienia warstw.
+
+
